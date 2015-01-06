@@ -5,15 +5,17 @@ import org.zeroturnaround.javarebel.Integration;
 import org.zeroturnaround.javarebel.IntegrationFactory;
 import org.zeroturnaround.javarebel.Plugin;
 
+import de.micromata.jrebel.genome.cbp.StorageClassLoaderCBP;
+
 public class GenomePlugin implements Plugin {
 
   public void preinit() {
     ClassLoader cl = getClass().getClassLoader();
     Integration integration = IntegrationFactory.getInstance();
 
-//    integration.addIntegrationProcessor(cl,
-//        "de.micromata.genome.web.gwar.bootstrap.StorageClassLoader",
-//        new StorageClassLoaderCBP());
+    integration.addIntegrationProcessor(cl,
+        "de.micromata.genome.web.gwar.bootstrap.StorageClassLoader",
+        new StorageClassLoaderCBP());
   }
 
   public boolean checkDependencies(ClassLoader cl, ClassResourceSource crs) {
@@ -33,7 +35,7 @@ public class GenomePlugin implements Plugin {
   }
 
   public String getWebsite() {
-    return "http://www.micromata.de/";
+    return "https://github.com/laubfall/genome-jrebel-plugin";
   }
 
   public String getAuthor() {

@@ -6,7 +6,6 @@ import org.zeroturnaround.bundled.javassist.CtClass;
 import org.zeroturnaround.bundled.javassist.CtConstructor;
 import org.zeroturnaround.bundled.javassist.CtNewMethod;
 import org.zeroturnaround.bundled.javassist.NotFoundException;
-import org.zeroturnaround.javarebel.ClassEventListener;
 import org.zeroturnaround.javarebel.ClassResourceSource;
 import org.zeroturnaround.javarebel.integration.support.JavassistClassBytecodeProcessor;
 
@@ -24,7 +23,6 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
     cp.importPackage("org.zeroturnaround.javarebel.integration.util");
     cp.importPackage("de.micromata.genome.web.gwar.bootstrap");
     delegateResourceLoadingToJRebel(cp, ctClass);
-    clearInternalCacheWhenClassesAreReloaded(cp, ctClass);
   }
 
   private void delegateResourceLoadingToJRebel(ClassPool cp, CtClass ctClass) throws NotFoundException, CannotCompileException, Exception {
@@ -32,12 +30,6 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
     implementClassResourceSource(ctClass);
     registerClassLoaderInConstructors(ctClass);
     patchResourceFinderLogic(ctClass);
-  }
-
-  private void clearInternalCacheWhenClassesAreReloaded(ClassPool cp, CtClass ctClass) throws NotFoundException, Exception {
-    ctClass.addInterface(cp.get(ClassEventListener.class.getName()));
-    implementClassEventListener(ctClass);
-    registerClassEventListenerInConstructors(ctClass);
   }
 
   private void registerClassLoaderInConstructors(CtClass ctClass) throws CannotCompileException {
@@ -97,31 +89,6 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
         "    }" +
         "  }" +
         "  return resources.toArray(new Resource[resources.size()]);" +
-        "}", ctClass));
-  }
-
-  private void registerClassEventListenerInConstructors(CtClass ctClass) throws Exception {
-    CtConstructor[] cs = ctClass.getDeclaredConstructors();
-    for (int i = 0; i < cs.length; i++) {
-      //register only if constructor calls super constructor -- to avoid double registration
-      if (cs[i].callsSuper()) {
-        cs[i].insertAfter("ReloaderFactory.getInstance().addClassReloadListener(ClassEventListenerUtil.bindContextClassLoader(this));");
-      }
-    }
-  }
-
-  private void implementClassEventListener(CtClass ctClass) throws Exception {
-    ctClass.addMethod(CtNewMethod.make(
-        "public void onClassEvent(int eventType, Class klass) {" +
-        "  String className = klass.getName();" +
-        "  loadedClasses.remove(className);" +
-        "  missedClasses.remove(className);" +
-        "  missedResources.remove(className.replace('.', '/') + \".class\");" +
-        "  " + LOGGER + ".debug(\"cleared internal cache for {}\", className);" +
-        "}", ctClass));
-    ctClass.addMethod(CtNewMethod.make(
-        "public int priority() {" +
-        "  return ClassEventListener.PRIORITY_CORE;" +
         "}", ctClass));
   }
 

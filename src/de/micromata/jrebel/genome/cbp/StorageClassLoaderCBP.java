@@ -15,7 +15,6 @@ import org.zeroturnaround.javarebel.integration.support.JavassistClassBytecodePr
  */
 public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
 
-  private static final String BUILD_URL_ORIGINAL = "__jrBuildUrl";
   private static final String LOGGER = "LoggerFactory.getLogger(\"Genome\")";
 
   @Override
@@ -52,21 +51,18 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
   }
 
   private void patchResourceFinderLogic(CtClass ctClass) throws Exception {
-    //rename original implementation
-    ctClass.getDeclaredMethod("buildUrl").setName(BUILD_URL_ORIGINAL);
-    //add our own implementation in its place
-    ctClass.addMethod(CtNewMethod.make(
-        "protected URL buildUrl(ClassResPath rsm, String localName, StorageClassLoaderResPath.ResLoader loader) {" +
+    ctClass.getDeclaredMethod("buildUrl").insertBefore(
+        "{" +
+        "  String localName = $2;" +
         "  Integration integration = IntegrationFactory.getInstance();" +
         "  if (integration.isResourceReplaced(this, localName)) {" +
         "    " + LOGGER + ".debug(\"Finding managed resource {}\", localName);" +
-        "    $_ = integration.findResource(this, localName);" +
+        "    return integration.findResource(this, localName);" +
         "  }" +
         "  else {" +
         "    " + LOGGER + ".debug(\"Finding non-managed resource {}\", localName);" +
-        "    $_ = $proceed($$);" +
         "  }" +
-        "}", ctClass));
+        "}");
   }
 
   private void implementClassResourceSource(CtClass ctClass) throws CannotCompileException {
@@ -83,7 +79,7 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
         "    StorageClassLoaderResPath rsp = rsm.getEntries().get(name);" +
         "    if (rsp != null) {" +
         "      " + LOGGER + ".debug(\"getLocalResource({}) found a path!\", className);" +
-        "      return ResourceUtil.asResource(" + BUILD_URL_ORIGINAL + "(rsm, name, rsp.getLoader()));" +
+        "      return ResourceUtil.asResource(buildUrl(rsm, name, rsp.getLoader()));" +
         "    }" +
         "  }" +
         "  return null;" +
@@ -97,7 +93,7 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
         "    StorageClassLoaderResPath rsp = rsm.getEntries().get(name);" +
         "    if (rsp != null) {" +
         "      " + LOGGER + ".debug(\"getLocalResources({}) found a path!\", className);" +
-        "      resources.add(ResourceUtil.asResource(" + BUILD_URL_ORIGINAL + "(rsm, name, rsp.getLoader())));" +
+        "      resources.add(ResourceUtil.asResource(buildUrl(rsm, name, rsp.getLoader())));" +
         "    }" +
         "  }" +
         "  return resources.toArray(new Resource[resources.size()]);" +

@@ -4,6 +4,7 @@ import org.zeroturnaround.bundled.javassist.CannotCompileException;
 import org.zeroturnaround.bundled.javassist.ClassPool;
 import org.zeroturnaround.bundled.javassist.CtClass;
 import org.zeroturnaround.bundled.javassist.CtConstructor;
+import org.zeroturnaround.bundled.javassist.CtMethod;
 import org.zeroturnaround.bundled.javassist.CtNewMethod;
 import org.zeroturnaround.bundled.javassist.NotFoundException;
 import org.zeroturnaround.javarebel.ClassResourceSource;
@@ -13,8 +14,6 @@ import org.zeroturnaround.javarebel.integration.support.JavassistClassBytecodePr
  * Patches de.micromata.genome.web.gwar.bootstrap.StorageClassLoader.
  */
 public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
-
-  private static final String LOGGER = "LoggerFactory.getLogger(\"Genome\")";
 
   @Override
   public void process(ClassPool cp, ClassLoader cl, CtClass ctClass) throws Exception {
@@ -29,7 +28,9 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
     ctClass.addInterface(cp.get(ClassResourceSource.class.getName()));
     implementClassResourceSource(ctClass);
     registerClassLoaderInConstructors(ctClass);
-    patchResourceFinderLogic(ctClass);
+    whenClassPathChangesReInitializeIntegration(ctClass);
+    patchClassLoadingLogic(ctClass);
+    patchResourceLoadingLogic(ctClass);
   }
 
   private void registerClassLoaderInConstructors(CtClass ctClass) throws CannotCompileException {
@@ -42,53 +43,66 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
     }
   }
 
-  private void patchResourceFinderLogic(CtClass ctClass) throws Exception {
-    ctClass.getDeclaredMethod("buildUrl").insertBefore(
-        "{" +
-        "  String localName = $2;" +
-        "  Integration integration = IntegrationFactory.getInstance();" +
-        "  if (integration.isResourceReplaced(this, localName)) {" +
-        "    " + LOGGER + ".debug(\"Finding managed resource {}\", localName);" +
-        "    return integration.findResource(this, localName);" +
+  private void whenClassPathChangesReInitializeIntegration(CtClass ctClass) throws Exception {
+    String reInit = "IntegrationFactory.getInstance().reinitializeClassLoader(this);";
+    ctClass.getDeclaredMethod("addJar").insertAfter(reInit);
+    ctClass.getDeclaredMethod("addClassPath").insertAfter(reInit);
+  }
+
+  private void patchResourceLoadingLogic(CtClass ctClass) throws Exception {
+    {
+      CtMethod method = ctClass.getDeclaredMethod("getResourceLocally"); 
+      method.insertBefore(
+        "Integration integration = IntegrationFactory.getInstance();" +
+        "if (integration.isResourceReplaced($0, $1)) {" +
+        "    return integration.findResource($0, $1);" +
+        "}"
+      );
+    }
+    {
+      CtMethod method = ctClass.getDeclaredMethod("getResourceListLocally");
+      method.insertBefore(
+        "Integration integration = IntegrationFactory.getInstance();" +
+        "if (integration.isResourceReplaced($0, $1)) {" +
+        "  Enumeration en = integration.findResources($0, $1);" +
+        "  if (en != null) {" +
+        "    return Collections.list(en);" +
         "  }" +
-        "  else {" +
-        "    " + LOGGER + ".debug(\"Finding non-managed resource {}\", localName);" +
-        "  }" +
-        "}");
+        "}" 
+      );
+    }
+  }
+
+  private void patchClassLoadingLogic(CtClass ctClass) throws Exception {
+    CtMethod findClassMethod = ctClass.getDeclaredMethod("loadClassLocally"); 
+    findClassMethod.insertBefore(
+      "{ synchronized ($0) {" + 
+      "    Class result =" + 
+      "      findLoadedClass($1);" + 
+      "    if (result != null)" + 
+      "      return result;" + 
+      "    result = " + 
+      "      IntegrationFactory.getInstance().findReloadableClass($0, $1);" + 
+      "    if (result != null)" + 
+      "      return result;" + 
+      "}}"
+    );
   }
 
   private void implementClassResourceSource(CtClass ctClass) throws CannotCompileException {
     ctClass.addMethod(CtNewMethod.make(
-        "public Resource getClassResource(String className) {" +
-        "  " + LOGGER + ".debug(\"getClassResource({})\", className);" +
-        "  return ResourceUtil.getClassResource(this, className);" +
-        "}", ctClass));
-
-    ctClass.addMethod(CtNewMethod.make(
         "public Resource getLocalResource(String name) {" +
-        "  " + LOGGER + ".debug(\"getLocalResource({})\", className);" +
-        "  for (ClassResPath rsm : resPaths) {" +
-        "    StorageClassLoaderResPath rsp = rsm.getEntries().get(name);" +
-        "    if (rsp != null) {" +
-        "      " + LOGGER + ".debug(\"getLocalResource({}) found a path!\", className);" +
-        "      return ResourceUtil.asResource(buildUrl(rsm, name, rsp.getLoader()));" +
-        "    }" +
-        "  }" +
-        "  return null;" +
+        "  return ResourceUtil.asResource(getResourceLocally(name));" +
         "}", ctClass));
 
     ctClass.addMethod(CtNewMethod.make(
         "public Resource[] getLocalResources(String name) {" +
-        "  " + LOGGER + ".debug(\"getLocalResources({})\", className);" +
-        "  List resources = new ArrayList();" +
-        "  for (ClassResPath rsm : resPaths) {" +
-        "    StorageClassLoaderResPath rsp = rsm.getEntries().get(name);" +
-        "    if (rsp != null) {" +
-        "      " + LOGGER + ".debug(\"getLocalResources({}) found a path!\", className);" +
-        "      resources.add(ResourceUtil.asResource(buildUrl(rsm, name, rsp.getLoader())));" +
-        "    }" +
-        "  }" +
-        "  return resources.toArray(new Resource[resources.size()]);" +
+        "  return ResourceUtil.asResources(getResourceListLocally(name));" +
+        "}", ctClass));
+
+    ctClass.addMethod(CtNewMethod.make(
+        "public Resource getClassResource(String className) {" +
+        "  return getLocalResource(className.replace('.', '/') + \".class\");" +
         "}", ctClass));
   }
 

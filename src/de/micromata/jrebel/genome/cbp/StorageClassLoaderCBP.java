@@ -8,6 +8,7 @@ import org.zeroturnaround.bundled.javassist.CtMethod;
 import org.zeroturnaround.bundled.javassist.CtNewMethod;
 import org.zeroturnaround.bundled.javassist.NotFoundException;
 import org.zeroturnaround.javarebel.ClassResourceSource;
+import org.zeroturnaround.javarebel.IntegrationFactory;
 import org.zeroturnaround.javarebel.integration.support.JavassistClassBytecodeProcessor;
 
 /**
@@ -19,6 +20,7 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
   public void process(ClassPool cp, ClassLoader cl, CtClass ctClass) throws Exception {
     cp.importPackage("java.util");
     cp.importPackage("org.zeroturnaround.javarebel");
+    cp.importPackage("org.zeroturnaround.javarebel.gen");
     cp.importPackage("org.zeroturnaround.javarebel.integration.util");
     cp.importPackage("de.micromata.genome.web.gwar.bootstrap");
     delegateResourceLoadingToJRebel(cp, ctClass);
@@ -78,7 +80,7 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
     findClassMethod.insertBefore(
       "{ synchronized ($0) {" + 
       "    Class result =" + 
-      "      findLoadedClass($1);" + 
+      "      $0.findLoadedClass($1);" + 
       "    if (result != null)" + 
       "      return result;" + 
       "    result = " + 

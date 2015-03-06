@@ -10,6 +10,7 @@ import org.zeroturnaround.bundled.javassist.NotFoundException;
 import org.zeroturnaround.javarebel.ClassResourceSource;
 import org.zeroturnaround.javarebel.IntegrationFactory;
 import org.zeroturnaround.javarebel.integration.support.JavassistClassBytecodeProcessor;
+import org.zeroturnaround.javarebel.integration.util.ResourceUtil;
 
 /**
  * Patches de.micromata.genome.web.gwar.bootstrap.StorageClassLoader.
@@ -94,7 +95,7 @@ public class StorageClassLoaderCBP extends JavassistClassBytecodeProcessor {
   private void implementClassResourceSource(CtClass ctClass) throws CannotCompileException {
     ctClass.addMethod(CtNewMethod.make(
         "public Resource getLocalResource(String name) {" +
-        "  return ResourceUtil.asResource(getResourceLocally(name));" +
+        "  return ResourceUtil.asResource(getResourceLocally(name, false));" +
         "}", ctClass));
 
     ctClass.addMethod(CtNewMethod.make(
